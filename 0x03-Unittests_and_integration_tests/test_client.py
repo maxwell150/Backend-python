@@ -2,9 +2,10 @@
 """test for GithubOrgClient
 """
 import unittest
-from parameterized import parameterized
+from parameterized import parameterized, parameterized_class
 from unittest.mock import patch, PropertyMock
 from client import GithubOrgClient
+from fixtures import TEST_PAYLOAD
 
 
 class TestGithubOrgClient(unittest.TestCase):
@@ -53,3 +54,44 @@ class TestGithubOrgClient(unittest.TestCase):
         result = test_client.has_license(repos, license_key)
         self.assertEqual(expected, result)
 
+    @parameterized_class(
+        ("org_payload", "repos_payload", "expected_repos", "apache2_repos"),
+        TEST_PAYLOAD
+    )
+    class TestIntegrationGithubOrgClient(unittest.TestCase):
+        '''integration testing'''
+        @classmethod
+        def setUpClass(cls):
+            '''initialize'''
+            params = {'return_value.json.side_effect':
+                      [
+                          cls.org_payload, cls.repos_payload,
+                          cls.org_payload, cls.repos_payload
+                      ]
+                      }
+            cls.get_patcher = patch('requests.get', **params)
+            cls.mock = cls.get_patcher.start()
+
+        def test_public_repos(self):
+            '''to test GithubOrgClient.public_repos'''
+            test_class = GithubOrgClient('google')
+            self.assertEqual(test_class.org, self.org_payload)
+            self.assertEqual(test_class.repos_payload, self.repos_payload)
+            self.assertEqual(test_class.public_repos(), self.expected_repos)
+            self.assertEqual(test_class.public_repos("XLICENSE"), [])
+            self.mock.assert_called()
+
+        def test_public_repos_with_license(self):
+            '''to test the public_repos with the argument apache'''
+            test_class = GithubOrgClient('google')
+
+            self.assertEqual(test_class.public_repos(), self.expected_repos)
+            self.assertEqual(test_class.public_repos("XLICENSE"), [])
+            self.assertEqual(test_class.public_repos(
+                "apache-2.0"), self.apache2_repos)
+            self.mock.assert_called()
+
+        @classmethod
+        def tearDownClass(cls):
+            '''instructions to run after test'''
+            cls.get_patcher.stop()
